@@ -92,3 +92,9 @@ These commands are available to the host (the singleplayer world owner) and are 
 | 서버 위치 / Server Region | 서울, 한국 / Seoul, South Korea |
 | 서버 인프라 / Infrastructure | Oracle Cloud |
 | 서버 구성 / Server Stack | Signaling + STUN + TURN |
+
+---
+
+## 포크의 독립 조사 기록 / Independent fork research
+
+이 포크에서 수행한 소스 분석과 아직 검증되지 않은 개발 제안은 [호환성·모드팩 공유 조사](docs/research/compatibility-and-modpack.md)에 구분해 기록했다. 원 제작자의 공식 기능 설명은 아니다.
