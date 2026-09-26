@@ -87,7 +87,7 @@ public class WebRtcClient {
     // ── 인스턴스 필드 ─────────────────────────────────────────────────────────
 
     private final String roomId;
-    private final int    localPort;
+    private final int    preferredLocalPort;
     private final String sessionId;
 
     private AudioDeviceModule       audioModule;
@@ -129,21 +129,33 @@ public class WebRtcClient {
 
     public WebRtcClient(String roomId, int localPort) {
         this.roomId    = roomId;
-        this.localPort = localPort;
+        this.preferredLocalPort = localPort;
         this.sessionId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
     }
 
     public void start() throws Exception {
         running.set(true);
-        connectPairSignaling();
+        try {
+            serverChannel = LocalGuestListener.open(preferredLocalPort);
+            LOG.info("[webrtc] Ready on 127.0.0.1:{}", localPort());
+            connectPairSignaling();
 
-        serverChannel = ServerSocketChannel.open();
-        serverChannel.bind(new InetSocketAddress(localPort));
-        LOG.info("[webrtc] Ready on port {}", localPort);
+            Thread t = new Thread(this::acceptAndBridge, "webrtc-accept");
+            t.setDaemon(true);
+            t.start();
+        } catch (Exception failure) {
+            close();
+            throw failure;
+        }
+    }
 
-        Thread t = new Thread(this::acceptAndBridge, "webrtc-accept");
-        t.setDaemon(true);
-        t.start();
+    /** Port held by this session's already-bound guest listener. */
+    public int localPort() {
+        ServerSocketChannel listener = serverChannel;
+        if (listener == null || !listener.isOpen()) {
+            throw new IllegalStateException("Guest listener is not open");
+        }
+        return listener.socket().getLocalPort();
     }
 
     private void acceptAndBridge() {
