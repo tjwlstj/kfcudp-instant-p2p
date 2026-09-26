@@ -114,15 +114,16 @@
 | 상태 | 내용 |
 |---|---|
 | **분리 완료** | 채널 파싱·조합·방 표시 규칙을 `P2PConfig`에서 `ChannelRules`로 추출하고 기존 공개 호출 경로를 유지했다. |
-| **부분 구현** | 게스트 루프백 리스너·보안 난수 초대 코드·로그인 역할 조회 대기 축소를 각각 독립 작업으로 구현하고 순수 Java 검사를 추가했다. [작업 가이드](docs/research/work-guides/README.md)에 구현·검증 경계를 기록했다. |
+| **부분 구현** | 01 게스트 루프백 리스너와 02 보안 난수 초대 코드는 포크 `main`에 반영됐다. 이 개발 브랜치의 PR #4는 03 로그인 역할 조회 대기 축소를 추가한다. 각각의 구현·실행 검증 경계는 [작업 가이드](docs/research/work-guides/README.md)에 기록했다. |
 | **계획** | 방 목록 표시 상태, 방 생명주기, WebRTC 세션·터널, 입장 정책의 추가 분리를 단계별로 검토한다. |
-| **현재 대표 빌드 확인** | 01~03 부분 구현을 포함한 로컬 개발 체크아웃에서 JDK 25·Gradle 9.7.1로 `:1.21:build`와 `:26.2:build`가 각각 성공했다. 명령과 남은 경계는 [작업 가이드](docs/research/work-guides/README.md)에 기록했다. |
-| **현재 미검증** | 01~03 변경을 포함한 전체 17개 대상 빌드와 실제 Minecraft 방장·게스트 연결. 이전 코드의 전체 빌드 성공은 현재 변경의 증거로 쓰지 않는다. |
+| **03 대표 빌드 확인** | 03 역할 변경을 포함한 로컬 개발 체크아웃에서 JDK 25·Gradle 9.7.1로 `:1.21:build`와 `:26.2:build`가 각각 성공했다. 명령과 경고는 [작업 가이드](docs/research/work-guides/README.md)에 기록했다. |
+| **03 소스의 17개 대상 CI** | 소스 커밋 [`7542df6`](https://github.com/tjwlstj/kfcudp-instant-p2p/commit/7542df60e8b570d5ccff5ee237dad305dfbec87e)의 [PR 실행](https://github.com/tjwlstj/kfcudp-instant-p2p/actions/runs/36259045553)과 [push 실행](https://github.com/tjwlstj/kfcudp-instant-p2p/actions/runs/36259041290)에서 각각 17/17 빌드 작업이 성공했다. 이후 문서 변경 HEAD 자체의 CI 결과로 해석하지 않는다. |
+| **현재 미검증** | 실제 Minecraft 방장·게스트 두 클라이언트 연결, 만실 역할 판정·틱 지연, 사용 가능한 서명 역할 서비스의 성공·실패 응답. |
 
 - [코드 트리·분리 지도](docs/research/code-tree.md): 전체 파일 역할, 의존 관계, 분리 후보와 유지할 계약
 - [호환성·모드팩 공유 조사](docs/research/compatibility-and-modpack.md): 확인한 사실과 아직 제안 단계인 아이디어
 - [필요 기능·역할·최적화 조사](docs/research/feature-role-optimization.md): 게임 스레드 대기, 데이터 경로, 신뢰 경계, 추가 기능 후보와 우선순위
-- [순차 작업 가이드](docs/research/work-guides/README.md): 조사 제안을 개별 작업·검증 단계로 분리하고 01~03의 부분 구현을 추적
+- [순차 작업 가이드](docs/research/work-guides/README.md): `main`의 01·02와 PR #4의 03 부분 구현을 구분해 추적
 - [프로젝트 검증 도구](docs/research/verification-tools.md): 트리·링크·설정과 순수 Java 계약 검사, 실게임 검증 경계
 - [프로젝트 AI 스킬](.agents/skills/instant-p2p-maintainer/SKILL.md): 이 포크에서 코드 변경을 검토할 때의 경계와 검증 기준. Claude Code용 프로젝트 [진입점 파일](.claude/skills/instant-p2p-maintainer/SKILL.md)은 이 원본을 가리킨다.
 
