@@ -11,7 +11,8 @@ tools/
 │  └─ run_contracts.py           JDK로 순수 Java 계약 검사 실행
 └─ tests/java/kfc/udp/client/webrtc/
    ├─ ContractCheck.java        채널·시그널링 계약 검사
-   └─ LocalSecurityCheck.java   루프백 소켓·초대 코드 검사
+   ├─ LocalSecurityCheck.java   루프백 소켓·초대 코드 검사
+   └─ RoleRefreshCheck.java     역할 조회 동시성·시간 제한 검사
 .github/workflows/verify-repository.yml
 docs/research/verification-tools.md
 ```
@@ -29,7 +30,7 @@ py -3 tools/verify/run_contracts.py --java-home 'C:\path\to\jdk-21'
 
 JDK가 `PATH` 또는 `JAVA_HOME`에 있으면 `--java-home`을 생략할 수 있다. Java 실행기는 컴파일 산출물을 임시 디렉터리에 만들고 제거하며, 프로젝트의 `build/`나 소스에 쓰지 않는다. Gradle, 게임 클라이언트, 시그널링 서비스, 외부 네트워크는 필요하지 않다.
 
-각 도구는 성공 시 `PASS`, 대상 체크아웃에 없는 선택 기능이면 `SKIP`, 불일치 시 `FAIL`과 종료 코드 1을 반환한다. `run_contracts.py`의 기본 채널·시그널링 묶음은 필수이며 로컬 보안 묶음은 대상 소스가 모두 없을 때만 `SKIP`한다. 선택 묶음의 소스가 일부만 있으면 `FAIL`한다. `--repo PATH`를 주면 현재 도구를 다른 체크아웃의 소스에 적용할 수 있다. 병합 전 PR 기준 커밋이나 별도 개발 브랜치를 비교할 때 유용하다.
+각 도구는 성공 시 `PASS`, 대상 체크아웃에 없는 선택 기능이면 `SKIP`, 불일치 시 `FAIL`과 종료 코드 1을 반환한다. `run_contracts.py`의 기본 채널·시그널링 묶음은 필수이며 로컬 보안·역할 조회 묶음은 대상 소스가 모두 없을 때만 `SKIP`한다. 선택 묶음의 소스가 일부만 있으면 `FAIL`한다. `--repo PATH`를 주면 현재 도구를 다른 체크아웃의 소스에 적용할 수 있다. 병합 전 PR 기준 커밋이나 별도 개발 브랜치를 비교할 때 유용하다.
 
 ```powershell
 py -3 tools/verify/check_project_contract.py --repo 'C:\path\to\pr-1' --require-claude
@@ -47,15 +48,15 @@ py -3 tools/verify/run_contracts.py --repo 'C:\path\to\pr-2' --java-home 'C:\pat
 | `check_tree.py` | 현재 Java 파일과 README·코드 트리의 물리적 파일 목록, 이 문서의 도구 파일 목록 | 각 클래스의 책임이 문서 설명과 같은지 |
 | `check_links.py` | 저장소 내부 Markdown 상대 링크와 `#L번호`의 존재 | 외부 웹페이지 상태, 인용한 주장의 진위 |
 | `check_project_contract.py` | Stonecutter·CI 매트릭스·의존성 대상 일치, 스킬 위치·메타데이터·무시 규칙 | 각 Minecraft 버전의 실제 컴파일·실행 |
-| `run_contracts.py` | Minecraft에 의존하지 않는 채널·시그널링 계약, 로컬 소켓의 루프백 바인드·대체 포트, 초대 코드 형식 | Fabric Mixins, 초대 코드의 예측 저항성 증명, 실게임 접속·입장 정책·역할 배지 표시, 외부 시그널링 서버 동작 |
+| `run_contracts.py` | Minecraft에 의존하지 않는 채널·시그널링 계약, 로컬 소켓의 루프백 바인드·대체 포트, 초대 코드 형식, 역할 조회 조정기의 동시 요청·시간 제한 | Fabric Mixins, 초대 코드의 예측 저항성 증명, 실제 HTTP 서명·재생 방지, 실게임 접속·입장 정책·역할 배지 표시, 외부 시그널링 서버 동작 |
 
-위의 검사는 PR #1의 스킬·문서 추적과 PR #2의 연구 문서·코드 구조 점검에 적용할 수 있다. [순차 작업 01·02](work-guides/README.md)의 일부 구현에는 순수 Java 검사가 추가됐다. 03 이후 제안은 이 브랜치에서 PLANNED다. 로컬 소켓 검사만으로 Minecraft 접속을 `PASS`로 표시하지 않는다.
+위의 검사는 포크 `main`에 병합된 PR #1·#2의 스킬·연구 문서와 [순차 작업 01·02](work-guides/README.md)에 적용할 수 있다. PR #4의 작업 03에는 역할 조회 조정기 순수 Java 검사를 추가했다. 나머지 제안은 PLANNED다. 로컬 소켓 검사와 역할 조회 조정기 검사만으로 Minecraft 접속이나 서버 틱 지연 감소를 `PASS`로 표시하지 않는다. 역할 응답 서명 검증에는 nonce·시각 확인이 없어 과거의 정상 서명 응답 재생 가능성도 별도 과제로 남는다.
 
 ## 빌드와 실제 접속 기록
 
 공유 Java 소스를 고친 PR은 프로젝트 스킬에 따라 최소 1.21.x와 26.x 대표 대상을 빌드한다. 릴리스 범위 주장은 기존 `.github/workflows/build.yml`의 17개 대상이 모두 통과한 결과를 사용한다. 컴파일과 위 도구를 통과해도 두 게임 인스턴스 사이의 P2P 연결은 별도로 관찰해야 한다.
 
-현재 01·02 변경을 포함한 이 브랜치에서는 JDK 25·Gradle 9.7.1로 `:1.21:build`와 `:26.2:build`가 각각 성공했다(`--configure-on-demand --offline --no-daemon`). 두 JAR의 `fabric.mod.json`은 각각 Minecraft `1.21`·Java `>=21`, Minecraft `26.2`·Java `>=25`를 요구하며 `InviteCodes.class`가 포함됐다. 이 로컬 체크아웃에서 전체 17개 대상 빌드는 실행하지 않았으므로 PR CI를 별도로 확인한다. 두 클라이언트 연결은 미검증이다.
+03 역할 변경을 포함한 개발 체크아웃에서는 JDK 25·Gradle 9.7.1로 `:1.21:build`와 `:26.2:build`가 각각 성공했다(`--configure-on-demand --offline --no-daemon`). 두 대표 JAR의 `fabric.mod.json`은 각각 Minecraft `1.21`·Java `>=21`, Minecraft `26.2`·Java `>=25`를 요구하며 `InviteCodes.class`가 포함됐다. 03 소스 커밋 [`7542df6`](https://github.com/tjwlstj/kfcudp-instant-p2p/commit/7542df60e8b570d5ccff5ee237dad305dfbec87e)의 [PR CI](https://github.com/tjwlstj/kfcudp-instant-p2p/actions/runs/36259045553)와 [push CI](https://github.com/tjwlstj/kfcudp-instant-p2p/actions/runs/36259041290)는 각각 17/17 대상 빌드에 성공했다. 이후 문서 변경 HEAD의 CI 결과로 이 실행을 대신하지 않는다. 두 클라이언트 연결과 사용 가능한 서명 역할 서비스의 응답을 통한 실제 정책 검증은 미실행이다.
 
 런타임 확인이 필요한 변경에는 아래 항목을 PR 설명이나 별도 기록에 남긴다. 미실행 항목은 `미실행`으로 둔다.
 

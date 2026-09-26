@@ -2,15 +2,17 @@
 
 이 트리는 [기능·역할·최적화 조사](../feature-role-optimization.md)의 제안을 실행 가능한 작은 작업으로 나눈다. **소스 확인**은 조사 기준 커밋 `1880590`의 클라이언트 코드에서 읽은 사실, **추정**은 서버·실행 증거가 없는 판단, **제안**은 앞으로 할 변경이다. 각 소스 링크는 현재 파일 위치를 가리키므로, 실행 전에는 현재 HEAD와 해당 호출 경로를 다시 확인한다.
 
-이 브랜치에서 **01·02는 PARTIAL**, **03 이후와 후속 백로그는 PLANNED**다. 01·02는 소스 변경, 순수 Java 검사, 두 대표 버전 빌드를 갖췄지만 실제 Minecraft 방장·게스트 동작을 아직 검증하지 않았다. 이 문서의 상태는 작업 단계이며 배포 판정이 아니다.
+포크 `main`의 **01·02는 PARTIAL**, 이 개발 브랜치의 PR #4가 더하는 **03도 PARTIAL**이다. **04a 이후와 후속 백로그는 PLANNED**다. 01~03은 소스 변경과 순수 Java 검사를 갖췄지만 실제 Minecraft 방장·게스트 동작을 아직 검증하지 않았다. 이 문서의 상태는 작업 단계이며 배포 판정이 아니다.
 
-**현재 변경의 대표 빌드 기록:** 이 체크아웃에서 JDK 25·Gradle 9.7.1로 `:1.21:build`가 2분 3초, `:26.2:build`가 32초에 각각 성공했다. 두 빌드 모두 `--configure-on-demand --offline --no-daemon`을 사용했다. 1.21에는 기존 `CommandNodeAccessor` 매핑 경고, 26.2에는 deprecated API 알림, 두 빌드에는 Gradle 10 호환성 관련 deprecated 기능 경고가 있었다. 이전 코드에서의 전체 17개 대상 빌드 성공은 01·02의 전체 빌드를 뜻하지 않는다.
+**03 대표 빌드 기록:** 역할 변경을 포함한 로컬 개발 체크아웃에서 JDK 25·Gradle 9.7.1로 `:1.21:build`가 44초, `:26.2:build`가 37초에 각각 성공했다. 두 빌드 모두 `--configure-on-demand --offline --no-daemon`을 사용했다. 1.21에는 기존 `CommandNodeAccessor` 매핑 경고, 26.2에는 deprecated API 알림, 두 빌드에는 Gradle 10 호환성 관련 deprecated 기능 경고가 있었다.
+
+**03 전체 매트릭스 기록:** 소스 커밋 [`7542df6`](https://github.com/tjwlstj/kfcudp-instant-p2p/commit/7542df60e8b570d5ccff5ee237dad305dfbec87e)의 [PR CI](https://github.com/tjwlstj/kfcudp-instant-p2p/actions/runs/36259045553)와 [push CI](https://github.com/tjwlstj/kfcudp-instant-p2p/actions/runs/36259041290)에서 각각 17/17 대상 빌드가 성공했다. 이후 문서 변경 커밋의 CI가 끝났다는 뜻은 아니다. 실제 두 클라이언트 연결과 서명 역할 서비스 응답에 따른 만실 판정은 남아 있다.
 
 | 순서 | 작업 가이드 | 현재 상태 | 다음 단계 |
 |---|---|---|---|
-| 01 | [게스트 리스너 루프백 바인드](01-guest-loopback.md) | PARTIAL | 실제 게임 접속·루프백 제한 |
-| 02 | [초대 코드 난수](02-secure-invite-code.md) | PARTIAL | 실제 코드 입장 |
-| 03 | [로그인 역할 조회](03-login-role-refresh.md) | PLANNED | 별도 설계·실게임 만실 정책·틱 계측 |
+| 01 | [게스트 리스너 루프백 바인드](01-guest-loopback.md) | PARTIAL · main | 실제 게임 접속·루프백 제한 |
+| 02 | [초대 코드 난수](02-secure-invite-code.md) | PARTIAL · main | 실제 코드 입장 |
+| 03 | [로그인 역할 조회](03-login-role-refresh.md) | PARTIAL · PR #4 | 실제 만실 정책·틱 계측 |
 | 04a | [게스트 시그널링 비동기화](04a-guest-signaling.md) | PLANNED | 연결 수명 설계 |
 | 04b | [방장 네이티브 로드](04b-host-native-load.md) | PLANNED | 계측 후 변경 |
 | 04c | [월드 종료 대기](04c-world-shutdown.md) | PLANNED | 계측 후 변경 |

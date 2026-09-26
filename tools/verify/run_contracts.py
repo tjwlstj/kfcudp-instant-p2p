@@ -37,6 +37,8 @@ SUITES = (
     Suite("base contracts", ("ChannelRules.java", "VillasMsg.java"), "ContractCheck.java"),
     Suite("local security", ("InviteCodes.java", "LocalGuestListener.java"),
           "LocalSecurityCheck.java", optional=True),
+    Suite("role refresh", ("RoleRefreshCoordinator.java",),
+          "RoleRefreshCheck.java", optional=True),
 )
 
 

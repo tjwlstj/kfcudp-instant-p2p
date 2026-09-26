@@ -2,13 +2,15 @@
 
 이 문서는 포크 `main`(`1880590`) 소스를 읽고 **무엇을 더 만들어야 하는지(기능)**, **코드와 신뢰의 경계를 어떻게 나눌지(역할)**, **어디가 느리거나 낭비인지(최적화)**를 정리한다. 앞선 조사([코드 트리](code-tree.md), [호환성·모드팩](compatibility-and-modpack.md))와 겹치는 보안 항목(`ws://` 평문, `remote` 필드의 IP 노출, 차단 해시)은 반복하지 않는다.
 
+**후속 작업 기록:** 아래 본문은 `1880590`의 조사 스냅샷이다. 우선순위 [01](work-guides/01-guest-loopback.md) 루프백 리스너와 [02](work-guides/02-secure-invite-code.md) 보안 난수 생성은 포크 `main`에 반영됐다. 이 개발 브랜치의 PR #4는 [03](work-guides/03-login-role-refresh.md) 역할 조회 대기 축소를 **PARTIAL** 단계로 추가한다. 03은 원래 제안한 prefetch·TTL을 구현하지 않았고, 실패 때 캐시 특혜로 만실을 우회하지 않는 정책을 택했다. 03 소스 커밋 [`7542df6`](https://github.com/tjwlstj/kfcudp-instant-p2p/commit/7542df60e8b570d5ccff5ee237dad305dfbec87e)의 전체 17개 대상 CI는 성공했지만 두 클라이언트 실행과 서명 역할 서비스 응답을 이용한 판정은 확인하지 않았다. 서명 응답의 nonce·시각을 확인하지 않아 과거 정상 응답의 재생 방지는 후속 작업이다. 현재 구현·검증 상태는 각 가이드를 기준으로 읽는다.
+
 표기는 다음과 같다.
 
 - **확인**: 소스 또는 Minecraft·webrtc-java 바이트코드에서 직접 본 사실
 - **추정**: 코드에서 추론했지만 실행·패킷·서버 코드로 확인하지 않은 내용
 - **제안**: 아직 구현하지 않은 설계
 
-빌드, 게임 실행, 패킷 캡처는 하지 않았다. 시그널링 서버(`mc-signaling`) 소스는 이 저장소에 없으므로, 서버 동작에 기대는 항목은 모두 **추정**이다.
+원 조사에서는 빌드, 게임 실행, 패킷 캡처를 하지 않았다. 이후 빌드 결과는 위의 후속 작업 기록과 [03 작업 가이드](work-guides/03-login-role-refresh.md)에 따로 기록했다. 시그널링 서버(`mc-signaling`) 소스는 이 저장소에 없으므로, 서버 동작에 기대는 항목은 모두 **추정**이다.
 
 ## 요약: 먼저 할 일
 
@@ -23,7 +25,7 @@
 | 7 | 네트워크 순단 뒤 ICE 재시작으로 연결 유지 | 기능 | 양쪽 | 확인·제안 |
 | 8 | 버전 어댑터 계층으로 Stonecutter 중복 줄이기 | 역할 | 구조 | 확인 |
 
-1~4는 상대 피어와 주고받는 형식을 바꾸지 않아 원본 사용자와 섞여도 안전하다. 5 이후는 측정 또는 양쪽 변경이 필요하다.
+1~4는 상대 피어와 주고받는 형식을 바꾸지 않는 방향의 제안이다. 원본 사용자와의 실제 혼합 연결 안전성은 방장·게스트 실행으로 확인해야 한다. 5 이후는 측정 또는 양쪽 변경이 필요하다.
 
 ## 1. 최적화: 게임 스레드를 막는 지점
 
@@ -32,7 +34,7 @@
 | 상황 | 경로 | 막히는 스레드 | 최악 대기 |
 |---|---|---|---|
 | 게스트가 방에 접속 | [`ConnectScreenMixin`](../../src/client/java/kfc/udp/client/mixin/ConnectScreenMixin.java#L140) → `WebRtcBridge.start` → [`WebRtcClient.start`](../../src/client/java/kfc/udp/client/webrtc/WebRtcClient.java#L136) → `connectPairSignaling` → [`WebSocketClient.connect`](../../src/client/java/kfc/udp/client/webrtc/WebSocketClient.java#L52) | 렌더 | DNS 조회 + TCP 연결 10초 + 업그레이드 응답 10초 |
-| 방장이 게스트 로그인 처리 | `checkCanJoin` → [`RoomRoles.ensureFreshForLogin`](../../src/client/java/kfc/udp/client/webrtc/RoomRoles.java#L110) → [`Roles.refreshBlocking`](../../src/client/java/kfc/udp/client/webrtc/Roles.java#L107) | 통합 서버 | 로그인마다 0.7초 |
+| 방장이 게스트 로그인 처리 | `checkCanJoin` → [`RoomRoles.ensureFreshForLogin`](../../src/client/java/kfc/udp/client/webrtc/RoomRoles.java) → [`Roles.refreshBlocking`](../../src/client/java/kfc/udp/client/webrtc/Roles.java) | 통합 서버 | 기준 커밋에서는 로그인마다 최대 0.7초. 현재 변경은 [03 가이드](work-guides/03-login-role-refresh.md) 참고 |
 | 방 열기 | [`openRoomNow`](../../src/client/java/kfc/udp/client/KfcudpClient.java#L1096) → `WebRtcBridge.startHost` → [`WebRtcHost.start`](../../src/client/java/kfc/udp/client/webrtc/WebRtcHost.java#L112)의 `new PeerConnectionFactory` | 렌더 | 첫 1회 네이티브 추출·로드 |
 | 월드 저장 후 종료 | [`kfcudp$delayedStopHost(true)`](../../src/client/java/kfc/udp/client/KfcudpClient.java#L1824) | 렌더 | 게스트가 없어도 고정 1.5초 |
 
@@ -184,15 +186,15 @@ WS 하나로 여러 로비를 구독하려면 서버가 바뀌어야 한다.
 
 ### 게스트 로컬 포트의 기존 전체 인터페이스 바인드 (기준 커밋 확인)
 
-- 기준 커밋 `1880590`에서 `WebRtcClient`는 `new InetSocketAddress(localPort)`로 모든 인터페이스에 바인드했고 `WebRtcBridge.findFreePort`도 별도 소켓으로 빈 포트를 탐색했다. 이 호출은 현재 소스에서 제거됐다.
-- 게스트 터널이 첫 연결 하나만 받는 경계와 최대 120초 대기는 별도 실게임 검증이 필요하다.
-- 같은 네트워크의 다른 기기가 먼저 붙는 상황이 실제 연결 실패를 만들지는 재현하지 않았다.
+- 기준 커밋의 [`WebRtcClient`](../../src/client/java/kfc/udp/client/webrtc/WebRtcClient.java)는 `new InetSocketAddress(localPort)`로 모든 인터페이스에 바인드했다. `WebRtcBridge.findFreePort`도 같은 주소로 탐색했다. 현재 변경은 [01 가이드](work-guides/01-guest-loopback.md) 참고.
+- 첫 연결 하나만 받고 최대 120초를 기다린다.
+- 그래서 같은 네트워크의 다른 기기가 먼저 이 포트에 붙으면, 그 연결이 방장에게 터널링되고 실제 Minecraft 접속은 실패한다.
 
 Windows에서 방화벽 허용 창이 떴는지는 확인하지 않았다(**추정**). 이 브랜치의 [`LocalGuestListener`](../../src/client/java/kfc/udp/client/webrtc/LocalGuestListener.java)는 `127.0.0.1`에 직접 바인드하고 실제 사용 포트를 전달한다. [01 가이드](work-guides/01-guest-loopback.md)에 검증 경계를 적었다.
 
 ### 초대 코드 생성기의 기존 난수 (기준 커밋 확인)
 
-- 기준 커밋 `1880590`의 `generateCode`는 `java.util.Random`(48비트 선형 합동 생성기)으로 32글자 중 10자를 뽑았다. 현재 코드는 [`InviteCodes`](../../src/client/java/kfc/udp/client/webrtc/InviteCodes.java)의 `SecureRandom` 생성기에 위임한다.
+- 기준 커밋의 [`generateCode`](../../src/client/java/kfc/udp/client/KfcudpClient.java)는 `java.util.Random`(48비트 선형 합동 생성기)으로 32글자 중 10자를 뽑았다. 현재 변경은 [02 가이드](work-guides/02-secure-invite-code.md) 참고.
 - 공개 방 코드는 목록에 그대로 노출된다.
 - 기존 난수에서 같은 게임 실행 중 비공개 코드가 추론 가능한지는 재현하지 않았다(**추정**). [02 가이드](work-guides/02-secure-invite-code.md)에 변경과 검증 경계를 적었다.
 

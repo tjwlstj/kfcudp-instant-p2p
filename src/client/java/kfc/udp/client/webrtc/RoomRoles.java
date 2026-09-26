@@ -20,7 +20,8 @@ import java.util.UUID;
  * 방 안에서 통용되는 등급 — <b>방장이 자기 {@link Roles} 사본으로 계산해 접속자에게 내려보낸 값</b>이다.
  * <p>
  * <b>왜 필요한가</b> — roles.json은 방장이 방을 열 때와 접속자가 들어올 때 각자 따로 받아온다
- * ({@code WebRtcBridge.startHost}/{@code start}의 {@link Roles#refreshAsync()}). 그 사이에 roles.json이
+ * ({@code WebRtcBridge.startHost}/{@code start}의 {@link Roles#refreshAsync()}). 방장은
+ * 로그인에서도 조회하지만, 자리가 있으면 비동기로 처리한다. 그 사이에 roles.json이
  * 바뀌면 두 사본이 어긋나는데, 실제 효력은 전부 방장 쪽에서 판정한다:
  * <ul>
  *   <li>{@code P2PBanManager.checkCanJoin} — 정원 무시 입장 허용</li>
@@ -77,8 +78,8 @@ public final class RoomRoles {
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> clear());
 
         // 방장 쪽: 접속자 구성이 바뀌었으니 전원에게 새로 뿌린다. 목록이 "접속 중인 등급자"라서
-        // 새로 들어온 사람을 기존 접속자들도 알아야 한다. roles.json 새로고침은 이 시점이 아니라
-        // 더 앞(LOGIN, ensureFreshForLogin)에서 이미 끝나 있다.
+        // 새로 들어온 사람을 기존 접속자들도 알아야 한다. 만실 LOGIN의 역할 조회는 이 시점
+        // 전에 완료됐거나 실패 판정이 났다. 자리가 있는 방에서는 비동기 조회가 이어질 수 있다.
         // 접속자 쪽: 접속이 끝난 순간 방장에게 방 상태를 직접 요청한다.
         // <b>방장이 ServerPlayConnectionEvents.JOIN에서 먼저 보내는 것만으로는 안 됐다</b> — 그
         // 시점엔 아직 커스텀 페이로드가 접속자에게 확실히 전달되지 않아서, 정원 표기·방장 배지·
@@ -95,27 +96,41 @@ public final class RoomRoles {
         });
     }
 
-    /** LOGIN 직전 새로고침을 얼마까지 기다릴지 — 시그널링 서버는 같은 배포라 보통 수십 ms면
-     * 끝난다. 넘으면 캐시값으로 진행하고 뒤늦게 도착한 값으로 다시 맞춘다. */
+    /** Full-room login only: the server tick waits at most this long. */
     private static final long LOGIN_REFRESH_TIMEOUT_MS = 700;
 
     /**
-     * 방장이 접속 요청(LOGIN)을 처리하기 <b>직전에</b> roles.json을 최신으로 맞춘다 —
-     * {@code P2PBanManager.checkCanJoin}이 부른다.
-     * <p>
-     * 이게 없으면 새로고침이 비동기라 LOGIN 판정(정원 무시 입장 허용)과 그 순간 계산돼 캐시되는
-     * 탭 목록 배지가 낡은 값으로 굳는다 — 방을 연 뒤 roles.json에서 등급을 뺏긴 사람이 첫 접속엔
-     * 그대로 개발자로 보이고, 두 번째 접속부터야 맞게 보이던 원인이다.
+     * 방장 LOGIN의 로컬 거부 조건을 통과한 뒤 호출한다. 자리가 남으면 갱신을 백그라운드로
+     * 보내고, 등급이 바뀌면 기존 플레이어의 방 상태와 탭 배지를 다시 보낸다. 만실이면 이번
+     * HTTP 요청에서 받은 서명 검증·파싱 완료 응답을 최대 700ms 기다린다. 실패/시간 초과 때는 캐시 등급으로
+     * 정원 특혜를 주지 않는다. HTTP 서명은 재생된 과거의 정상 응답까지 구별하지는 못한다.
+     *
+     * @return 만실 판정에 사용할 서명 응답을 이번 조회에서 받았으면 true
      */
-    public static void ensureFreshForLogin(MinecraftServer server) {
-        if (!kfc.udp.client.KfcudpClient.isRoomActive()) return;
-        Roles.refreshBlocking(LOGIN_REFRESH_TIMEOUT_MS, () -> server.execute(() -> {
+    public static boolean ensureFreshForLogin(MinecraftServer server, boolean roomFull) {
+        if (!kfc.udp.client.KfcudpClient.isRoomActive()) return false;
+        Object hostToken = WebRtcBridge.currentHostToken();
+        Runnable onChanged = () -> server.execute(() -> {
+            if (hostToken == null || hostToken != WebRtcBridge.currentHostToken()
+                    || !kfc.udp.client.KfcudpClient.isRoomActive() || !isCurrentServer(server)) return;
             broadcast(server);
-            // 탭 목록 이름은 접속 시점에 한 번만 계산돼 전송되므로(DevBadgeMixin 주석) 등급이
-            // 바뀌면 다시 보내야 옛 배지가 안 남는다.
+            // 탭 이름은 로그인 시 계산되므로 기존 접속자의 배지도 다시 보내야 한다.
             kfc.udp.client.KfcudpClient.kfcudp$refreshTabList(server);
-        }));
+        });
+        if (roomFull) return Roles.refreshBlocking(LOGIN_REFRESH_TIMEOUT_MS, onChanged);
+        Roles.refreshAsync(onChanged);
+        return false;
     }
+
+    //? if >=26.1 {
+    /*private static boolean isCurrentServer(MinecraftServer server) {
+        return net.minecraft.client.Minecraft.getInstance().getSingleplayerServer() == server;
+    }
+    *///?} else {
+    private static boolean isCurrentServer(MinecraftServer server) {
+        return net.minecraft.client.MinecraftClient.getInstance().getServer() == server;
+    }
+    //?}
 
     private static void apply(P2PNet.RoomState state) {
         ranks = state.ranks();

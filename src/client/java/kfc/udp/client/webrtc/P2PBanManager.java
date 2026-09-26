@@ -687,17 +687,13 @@ public class P2PBanManager {
         // 방장(싱글플레이 오너)은 어떤 경우에도 막지 않는다
         if (isHost(server, profile)) return null;
 
-        // 아래 정원 판정(hasPerk)과, 바로 뒤에 계산돼 캐시되는 탭 목록 배지가 이 순간의 등급
-        // 목록으로 결정된다 — 그래서 여기서 짧게 기다려 roles.json을 최신으로 맞춘다. 이게 없으면
-        // 새로고침이 비동기라 첫 접속만 낡은 등급으로 처리되고 두 번째 접속부터 맞았다.
-        RoomRoles.ensureFreshForLogin(server);
-
         String realIp = resolveRealIp(address);
-        if (realIp != null) uuidToRealIp.put(profileId(profile), realIp);
+        UUID playerId = profileId(profile);
+        if (realIp != null) uuidToRealIp.put(playerId, realIp);
 
         // IP는 로그에 남기지 않는다 — 방장이 버그 리포트로 로그를 그대로 공유하면
         // 접속자의 실제 IP가 텍스트로 박제된다. 닉네임만으로 충분히 추적 가능.
-        String uuid = profileId(profile).toString();
+        String uuid = playerId.toString();
         if (isPlayerBanned(uuid)) {
             LOG.info("[instant-p2p] login refused (banned): {}", profileName(profile));
             return msg("§cYou are banned: " + getBanReason(uuid));
@@ -705,7 +701,7 @@ public class P2PBanManager {
         // 등급자에게 추방당한 상태라면 그 추방을 건 사람들이 전부 나가거나 풀어줄 때까지 재입장
         // 자체를 막는다(ExpelManager 클래스 주석 참고) — 방장은 이 지점에 오기 전에 이미 위에서
         // 통과됐으니 방장이 여기서 걸릴 일은 없다.
-        if (ExpelManager.isExpelled(profileId(profile))) {
+        if (ExpelManager.isExpelled(playerId)) {
             LOG.info("[instant-p2p] login refused (expelled): {}", profileName(profile));
             return msgKey("instant-p2p.msg.still_expelled");
         }
@@ -717,9 +713,13 @@ public class P2PBanManager {
             LOG.info("[instant-p2p] login refused (ip banned): {}", profileName(profile));
             return msg("§cYour IP is banned: " + getIpBanReason(realIp));
         }
-        // 정원 초과도 같은 지점에서 막아야 join/left 로그가 안 남는다 — 제작자·서포터는 정원을 무시한다
+        // 로컬 거부 조건이 모두 통과된 뒤에만 roles.json을 조회한다. 정원이 남아 있으면
+        // 서버 틱을 기다리게 하지 않고, 늦게 바뀐 배지는 callback으로 다시 보낸다.
+        // 만실 때만 최대 700ms 기다리며, 검증된 응답이 없으면 낡은 특혜로 우회시키지 않는다.
         int max = roomMaxPlayers;
-        if (max > 0 && !kfc.udp.client.DevBadge.hasPerk(profileId(profile)) && countedPlayers(server) >= max) {
+        boolean roomFull = max > 0 && countedPlayers(server) >= max;
+        boolean rolesVerified = RoomRoles.ensureFreshForLogin(server, roomFull);
+        if (roomFull && (!rolesVerified || !kfc.udp.client.DevBadge.hasPerk(playerId))) {
             return msgKey("instant-p2p.msg.room_full", max);
         }
         return null;
