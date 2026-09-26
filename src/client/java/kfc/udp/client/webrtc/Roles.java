@@ -32,7 +32,8 @@ import java.util.concurrent.Executors;
  * 부르지만(매 프레임 가능) 이건 그냥 메모리 Set.contains라 네트워크와 무관 — 실제 새로고침은
  * 주기적 타이머가 아니라 명시적 호출로만 일어난다 — 방을 열거나 들어갈 때
  * ({@code WebRtcBridge.startHost}/{@code start})의 {@link #refreshAsync()}, 그리고 방장이 접속
- * 요청을 처리하기 직전의 {@link #refreshBlocking}({@code RoomRoles.ensureFreshForLogin})뿐이다.
+ * 요청을 처리할 때의 {@link #refreshAsync(Runnable)} 또는 {@link #refreshBlocking}
+ * ({@code RoomRoles.ensureFreshForLogin})뿐이다.
  * 방을 안 켜고 있는 동안은 네트워크를 아예 안 탄다.
  * <p>
  * 로컬 파일 캐시는 일부러 안 둔다 — 새로고침이 실패해도(성공했을 때만 덮어쓰므로) 그 세션
@@ -72,6 +73,8 @@ public final class Roles {
         t.setDaemon(true);
         return t;
     });
+    private static final RoleRefreshCoordinator REFRESH =
+            new RoleRefreshCoordinator(EXECUTOR, Roles::refreshNow);
 
     private Roles() {}
 
@@ -91,34 +94,38 @@ public final class Roles {
      * 그 외엔 배지가 어차피 안 쓰이니 네트워크를 탈 이유가 없다. 백그라운드 스레드에서 돌고 즉시
      * 리턴하므로 호출부를 막지 않는다. */
     public static void refreshAsync() {
-        EXECUTOR.execute(Roles::refreshNow);
+        refreshAsync(null);
+    }
+
+    /** Refresh without delaying login; report a changed verified snapshot later. */
+    public static void refreshAsync(Runnable onChanged) {
+        REFRESH.request(onChanged);
     }
 
     /**
-     * 지금 새로고침하고 <b>최대 timeoutMs까지만</b> 기다린다 — 방장이 접속 요청(LOGIN)을 처리하기
-     * 직전에 부른다. 그 순간의 목록으로 정원 무시 입장 허용이 결정되고 탭 목록 배지가 계산돼
-     * 캐시되기 때문에, 여기서 최신값을 못 받으면 "첫 접속만 어긋나고 두 번째 접속부터 맞는"
-     * 증상이 난다(RoomRoles 클래스 주석 참고).
+     * 만실 방의 접속 요청(LOGIN)에서 서명 검증과 파싱을 마친 응답을 최대 timeoutMs까지만
+     * 기다린다. 검증된 응답이 없으면 이전 메모리 목록으로 정원 특혜를 부여하지 않는다.
      * <p>
-     * HTTP 자체 타임아웃(5초)만큼 서버 스레드를 붙잡으면 안 되니 전용 스레드에 올리고 여기서만
-     * 짧게 기다린다. 시간이 넘으면 캐시값으로 그냥 진행하고, 뒤늦게 도착한 결과도 onChanged로
-     * 똑같이 반영된다 — 그래서 늦어도 결국은 맞춰진다.
+     * HTTP 자체 타임아웃(5초)만큼 서버 스레드를 붙잡지 않도록 전용 스레드에서 조회한다.
+     * 늦게 도착한 검증된 변경은 onChanged로 기존 접속자의 표시를 갱신한다. 이 응답은
+     * 서명의 유효성을 뜻하며, HTTP 경로에서는 오래된 정상 서명 응답의 재생까지 막지 못한다.
      */
-    public static void refreshBlocking(long timeoutMs, Runnable onChanged) {
-        java.util.concurrent.CompletableFuture<Boolean> f =
-                java.util.concurrent.CompletableFuture.supplyAsync(Roles::refreshNow, EXECUTOR);
-        f.thenAccept(changed -> {
-            if (changed) onChanged.run();
-        });
+    public static boolean refreshBlocking(long timeoutMs, Runnable onChanged) {
         try {
-            f.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            boolean verified = REFRESH.await(timeoutMs, onChanged).verified();
+            if (!verified) {
+                LOG.warn("[roles] no verified signed response within {}ms; capacity bypass denied", timeoutMs);
+            }
+            return verified;
         } catch (Exception e) {
-            LOG.warn("[roles] blocking refresh did not finish in {}ms, using cached values", timeoutMs);
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            LOG.warn("[roles] refresh failed before capacity decision; bypass denied: {}", e.toString());
+            return false;
         }
     }
 
-    /** @return 목록이 실제로 바뀌었으면 true(실패·무변화는 false). */
-    private static boolean refreshNow() {
+    /** An unchanged signed response still qualifies for this login's capacity decision. */
+    private static RoleRefreshCoordinator.Result refreshNow() {
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(P2PConfig.SIGNALING_HTTP_URL + "/api/v1/roles"))
                     .timeout(HTTP_TIMEOUT)
@@ -127,30 +134,30 @@ public final class Roles {
             HttpResponse<String> resp = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() != 200) {
                 LOG.warn("[roles] fetch failed: HTTP {}", resp.statusCode());
-                return false;
+                return RoleRefreshCoordinator.Result.unavailable();
             }
             String sigB64 = resp.headers().firstValue("X-Roles-Signature").orElse(null);
             if (!verifySignature(resp.body(), sigB64)) {
                 LOG.warn("[roles] response signature missing or invalid, ignoring (possible tampering)");
-                return false;
+                return RoleRefreshCoordinator.Result.unavailable();
             }
             return apply(resp.body());
         } catch (Exception e) {
             LOG.warn("[roles] fetch failed: {}", e.getMessage());
-            return false;
+            return RoleRefreshCoordinator.Result.unavailable();
         }
     }
 
-    /** @return 세 목록 중 하나라도 실제로 달라졌으면 true. */
-    private static boolean apply(String json) {
+    /** @return whether a verified response was parsed, and whether it changed the lists. */
+    private static RoleRefreshCoordinator.Result apply(String json) {
         JsonObject o;
         try {
             o = GSON.fromJson(json, JsonObject.class);
         } catch (Exception e) {
             LOG.warn("[roles] malformed response, keeping previous values: {}", e.getMessage());
-            return false;
+            return RoleRefreshCoordinator.Result.unavailable();
         }
-        if (o == null) return false;
+        if (o == null) return RoleRefreshCoordinator.Result.unavailable();
         Set<UUID> newDev = parseUuids(o, "dev");
         Set<UUID> newSupporter = parseUuids(o, "supporter");
         Set<UUID> newStreamer = parseUuids(o, "streamer");
@@ -161,7 +168,7 @@ public final class Roles {
         if (changed) {
             LOG.info("[roles] updated: dev={} supporter={} streamer={}", dev.size(), supporter.size(), streamer.size());
         }
-        return changed;
+        return new RoleRefreshCoordinator.Result(true, changed);
     }
 
     private static PublicKey loadPublicKey() {

@@ -2,6 +2,8 @@
 
 이 문서는 포크 `main`(`1880590`) 소스를 읽고 **무엇을 더 만들어야 하는지(기능)**, **코드와 신뢰의 경계를 어떻게 나눌지(역할)**, **어디가 느리거나 낭비인지(최적화)**를 정리한다. 앞선 조사([코드 트리](code-tree.md), [호환성·모드팩](compatibility-and-modpack.md))와 겹치는 보안 항목(`ws://` 평문, `remote` 필드의 IP 노출, 차단 해시)은 반복하지 않는다.
 
+**후속 작업 기록:** 아래 본문은 `1880590`의 조사 스냅샷이다. 현재 개발 브랜치에서는 우선순위 1~3을 [독립 작업 가이드](work-guides/README.md)의 **PARTIAL** 단계로 진행했다. [01](work-guides/01-guest-loopback.md)은 직접 루프백 바인드와 포트 탐색 경쟁 제거, [02](work-guides/02-secure-invite-code.md)는 보안 난수 생성, [03](work-guides/03-login-role-refresh.md)은 정원이 남을 때 비동기 조회와 만실의 제한된 응답 대기를 구현했다. 03은 원래 제안한 prefetch·TTL을 구현하지 않았고, 실패 때 캐시 특혜로 만실을 우회하지 않는 정책을 택했다. 서명 응답의 nonce·시각을 확인하지 않아 과거 정상 응답의 재생 방지는 후속 작업이다. 현재 구현·검증 상태는 각 가이드를 기준으로 읽는다.
+
 표기는 다음과 같다.
 
 - **확인**: 소스 또는 Minecraft·webrtc-java 바이트코드에서 직접 본 사실
@@ -23,7 +25,7 @@
 | 7 | 네트워크 순단 뒤 ICE 재시작으로 연결 유지 | 기능 | 양쪽 | 확인·제안 |
 | 8 | 버전 어댑터 계층으로 Stonecutter 중복 줄이기 | 역할 | 구조 | 확인 |
 
-1~4는 상대 피어와 주고받는 형식을 바꾸지 않아 원본 사용자와 섞여도 안전하다. 5 이후는 측정 또는 양쪽 변경이 필요하다.
+1~4는 상대 피어와 주고받는 형식을 바꾸지 않는 방향의 제안이다. 원본 사용자와의 실제 혼합 연결 안전성은 방장·게스트 실행으로 확인해야 한다. 5 이후는 측정 또는 양쪽 변경이 필요하다.
 
 ## 1. 최적화: 게임 스레드를 막는 지점
 
@@ -32,7 +34,7 @@
 | 상황 | 경로 | 막히는 스레드 | 최악 대기 |
 |---|---|---|---|
 | 게스트가 방에 접속 | [`ConnectScreenMixin`](../../src/client/java/kfc/udp/client/mixin/ConnectScreenMixin.java#L140) → `WebRtcBridge.start` → [`WebRtcClient.start`](../../src/client/java/kfc/udp/client/webrtc/WebRtcClient.java#L136) → `connectPairSignaling` → [`WebSocketClient.connect`](../../src/client/java/kfc/udp/client/webrtc/WebSocketClient.java#L52) | 렌더 | DNS 조회 + TCP 연결 10초 + 업그레이드 응답 10초 |
-| 방장이 게스트 로그인 처리 | `checkCanJoin` → [`RoomRoles.ensureFreshForLogin`](../../src/client/java/kfc/udp/client/webrtc/RoomRoles.java#L110) → [`Roles.refreshBlocking`](../../src/client/java/kfc/udp/client/webrtc/Roles.java#L107) | 통합 서버 | 로그인마다 0.7초 |
+| 방장이 게스트 로그인 처리 | `checkCanJoin` → [`RoomRoles.ensureFreshForLogin`](../../src/client/java/kfc/udp/client/webrtc/RoomRoles.java) → [`Roles.refreshBlocking`](../../src/client/java/kfc/udp/client/webrtc/Roles.java) | 통합 서버 | 기준 커밋에서는 로그인마다 최대 0.7초. 현재 변경은 [03 가이드](work-guides/03-login-role-refresh.md) 참고 |
 | 방 열기 | [`openRoomNow`](../../src/client/java/kfc/udp/client/KfcudpClient.java#L1096) → `WebRtcBridge.startHost` → [`WebRtcHost.start`](../../src/client/java/kfc/udp/client/webrtc/WebRtcHost.java#L112)의 `new PeerConnectionFactory` | 렌더 | 첫 1회 네이티브 추출·로드 |
 | 월드 저장 후 종료 | [`kfcudp$delayedStopHost(true)`](../../src/client/java/kfc/udp/client/KfcudpClient.java#L1824) | 렌더 | 게스트가 없어도 고정 1.5초 |
 
@@ -184,7 +186,7 @@ WS 하나로 여러 로비를 구독하려면 서버가 바뀌어야 한다.
 
 ### 게스트 로컬 포트가 모든 네트워크 인터페이스에서 열린다 (확인)
 
-- [`WebRtcClient`](../../src/client/java/kfc/udp/client/webrtc/WebRtcClient.java#L141)는 `new InetSocketAddress(localPort)`로 모든 인터페이스에 바인드한다. [`WebRtcBridge.findFreePort`](../../src/client/java/kfc/udp/client/webrtc/WebRtcBridge.java#L169)도 같다.
+- 기준 커밋의 [`WebRtcClient`](../../src/client/java/kfc/udp/client/webrtc/WebRtcClient.java)는 `new InetSocketAddress(localPort)`로 모든 인터페이스에 바인드했다. `WebRtcBridge.findFreePort`도 같은 주소로 탐색했다. 현재 변경은 [01 가이드](work-guides/01-guest-loopback.md) 참고.
 - 첫 연결 하나만 받고 최대 120초를 기다린다.
 - 그래서 같은 네트워크의 다른 기기가 먼저 이 포트에 붙으면, 그 연결이 방장에게 터널링되고 실제 Minecraft 접속은 실패한다.
 
@@ -192,7 +194,7 @@ Windows에서는 전체 인터페이스 리슨 때문에 방화벽 허용 창이
 
 ### 초대 코드 생성기 (확인)
 
-- [`generateCode`](../../src/client/java/kfc/udp/client/KfcudpClient.java#L1839)는 `java.util.Random`(48비트 선형 합동 생성기)으로 32글자 중 10자를 뽑는다.
+- 기준 커밋의 [`generateCode`](../../src/client/java/kfc/udp/client/KfcudpClient.java)는 `java.util.Random`(48비트 선형 합동 생성기)으로 32글자 중 10자를 뽑았다. 현재 변경은 [02 가이드](work-guides/02-secure-invite-code.md) 참고.
 - 공개 방 코드는 목록에 그대로 노출된다.
 - 같은 게임 실행 중에 이후 발급되는 비공개 초대 코드를 관찰한 출력에서 추론할 여지가 있다(**추정**: 알려진 상태 복원 기법).
 - **제안:** `SecureRandom`으로 바꾼다. 비공개 방에서는 코드가 유일한 비밀이다.

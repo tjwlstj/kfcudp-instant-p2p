@@ -4,6 +4,7 @@ import kfc.udp.client.gui.CustomRoomScreen;
 import kfc.udp.client.webrtc.P2PBanManager;
 import kfc.udp.client.webrtc.P2PWhitelistManager;
 import kfc.udp.client.webrtc.WebRtcBridge;
+import kfc.udp.client.webrtc.InviteCodes;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -54,13 +55,9 @@ import net.minecraft.world.GameMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Random;
-
 public class KfcudpClient implements ClientModInitializer {
 
     public static final Logger LOG = LoggerFactory.getLogger("instant-p2p");
-    private static final Random RANDOM = new Random();
-    private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
     private static String activeInviteCode = null;
     private static int activeMaxPlayers = 8;
@@ -1837,11 +1834,7 @@ public class KfcudpClient implements ClientModInitializer {
     }
 
     private static String generateCode() {
-        StringBuilder sb = new StringBuilder(10);
-        for (int i = 0; i < 10; i++) {
-            sb.append(CODE_CHARS.charAt(RANDOM.nextInt(CODE_CHARS.length())));
-        }
-        return sb.toString();
+        return InviteCodes.generate();
     }
 
     /**
