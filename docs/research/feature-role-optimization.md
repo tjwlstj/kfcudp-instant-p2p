@@ -184,20 +184,19 @@ WS 하나로 여러 로비를 구독하려면 서버가 바뀌어야 한다.
 
 ## 5. 역할: 신뢰 경계
 
-### 게스트 로컬 포트가 모든 네트워크 인터페이스에서 열린다 (확인)
+### 게스트 로컬 포트의 기존 전체 인터페이스 바인드 (기준 커밋 확인)
 
 - 기준 커밋의 [`WebRtcClient`](../../src/client/java/kfc/udp/client/webrtc/WebRtcClient.java)는 `new InetSocketAddress(localPort)`로 모든 인터페이스에 바인드했다. `WebRtcBridge.findFreePort`도 같은 주소로 탐색했다. 현재 변경은 [01 가이드](work-guides/01-guest-loopback.md) 참고.
 - 첫 연결 하나만 받고 최대 120초를 기다린다.
 - 그래서 같은 네트워크의 다른 기기가 먼저 이 포트에 붙으면, 그 연결이 방장에게 터널링되고 실제 Minecraft 접속은 실패한다.
 
-Windows에서는 전체 인터페이스 리슨 때문에 방화벽 허용 창이 뜰 수 있다(**추정**). **제안:** 믹스인이 이미 `127.0.0.1`로 접속하므로 루프백 주소에만 바인드하면 된다.
+Windows에서 방화벽 허용 창이 떴는지는 확인하지 않았다(**추정**). 이 브랜치의 [`LocalGuestListener`](../../src/client/java/kfc/udp/client/webrtc/LocalGuestListener.java)는 `127.0.0.1`에 직접 바인드하고 실제 사용 포트를 전달한다. [01 가이드](work-guides/01-guest-loopback.md)에 검증 경계를 적었다.
 
-### 초대 코드 생성기 (확인)
+### 초대 코드 생성기의 기존 난수 (기준 커밋 확인)
 
 - 기준 커밋의 [`generateCode`](../../src/client/java/kfc/udp/client/KfcudpClient.java)는 `java.util.Random`(48비트 선형 합동 생성기)으로 32글자 중 10자를 뽑았다. 현재 변경은 [02 가이드](work-guides/02-secure-invite-code.md) 참고.
 - 공개 방 코드는 목록에 그대로 노출된다.
-- 같은 게임 실행 중에 이후 발급되는 비공개 초대 코드를 관찰한 출력에서 추론할 여지가 있다(**추정**: 알려진 상태 복원 기법).
-- **제안:** `SecureRandom`으로 바꾼다. 비공개 방에서는 코드가 유일한 비밀이다.
+- 기존 난수에서 같은 게임 실행 중 비공개 코드가 추론 가능한지는 재현하지 않았다(**추정**). [02 가이드](work-guides/02-secure-invite-code.md)에 변경과 검증 경계를 적었다.
 
 ### ICE 서버·peer 목록을 누가 보냈는지 검증하지 않는다 (확인 + 추정)
 
