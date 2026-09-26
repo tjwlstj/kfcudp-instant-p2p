@@ -10,7 +10,8 @@ tools/
 │  ├─ check_project_contract.py  Stonecutter·CI·의존성 버전, AI 스킬 경로
 │  └─ run_contracts.py           JDK로 순수 Java 계약 검사 실행
 └─ tests/java/kfc/udp/client/webrtc/
-   └─ ContractCheck.java        채널 규칙·시그널링 형식 검사
+   ├─ ContractCheck.java        채널·시그널링 계약 검사
+   └─ LocalSecurityCheck.java   루프백 소켓·초대 코드 검사
 .github/workflows/verify-repository.yml
 docs/research/verification-tools.md
 ```
@@ -28,7 +29,7 @@ py -3 tools/verify/run_contracts.py --java-home 'C:\path\to\jdk-21'
 
 JDK가 `PATH` 또는 `JAVA_HOME`에 있으면 `--java-home`을 생략할 수 있다. Java 실행기는 컴파일 산출물을 임시 디렉터리에 만들고 제거하며, 프로젝트의 `build/`나 소스에 쓰지 않는다. Gradle, 게임 클라이언트, 시그널링 서비스, 외부 네트워크는 필요하지 않다.
 
-각 도구는 성공 시 `PASS`, 해당 PR에 없는 선택 기능이면 `SKIP`, 불일치 시 `FAIL`과 종료 코드 1을 반환한다. `--repo PATH`를 주면 현재 도구를 다른 체크아웃의 소스에 적용할 수 있다. 두 PR이 아직 합쳐지지 않았을 때 유용하다.
+각 도구는 성공 시 `PASS`, 대상 체크아웃에 없는 선택 기능이면 `SKIP`, 불일치 시 `FAIL`과 종료 코드 1을 반환한다. `run_contracts.py`의 기본 채널·시그널링 묶음은 필수이며 로컬 보안 묶음은 대상 소스가 모두 없을 때만 `SKIP`한다. 선택 묶음의 소스가 일부만 있으면 `FAIL`한다. `--repo PATH`를 주면 현재 도구를 다른 체크아웃의 소스에 적용할 수 있다. 병합 전 PR 기준 커밋이나 별도 개발 브랜치를 비교할 때 유용하다.
 
 ```powershell
 py -3 tools/verify/check_project_contract.py --repo 'C:\path\to\pr-1' --require-claude
@@ -37,7 +38,7 @@ py -3 tools/verify/check_links.py --repo 'C:\path\to\pr-2'
 py -3 tools/verify/run_contracts.py --repo 'C:\path\to\pr-2' --java-home 'C:\path\to\jdk-21'
 ```
 
-`--require-claude`는 PR #1처럼 `.claude/skills/` 진입점을 추가하는 변경에 사용한다. 기본 `main`에는 그 파일이 없어 일반 검사에서는 `SKIP`으로 표시한다. 도구 자체가 설치된 브랜치의 CI에서는 해당 브랜치의 소스와 문서를 검사한다.
+`--require-claude`는 PR #1의 병합 전 후보처럼 `.claude/skills/` 진입점이 필수인 체크아웃을 명시적으로 검사할 때 사용한다. 이 옵션이 없어도 진입점 파일이 있으면 내용과 무시 규칙을 검사하고, 파일이 Git 무시 대상이 아니면 누락을 `FAIL`로 처리한다. PR #1 병합 전의 기준 커밋처럼 해당 경로가 없고 무시 대상이었던 체크아웃만 `SKIP`이었다. 현재 포크 `main`에는 PR #1의 진입점이 있어 일반 검사에서도 `PASS`가 요구된다. CI에서는 실행 중인 브랜치의 소스와 문서를 검사한다.
 
 ## 각 검사가 말해 주는 것
 
@@ -46,13 +47,15 @@ py -3 tools/verify/run_contracts.py --repo 'C:\path\to\pr-2' --java-home 'C:\pat
 | `check_tree.py` | 현재 Java 파일과 README·코드 트리의 물리적 파일 목록, 이 문서의 도구 파일 목록 | 각 클래스의 책임이 문서 설명과 같은지 |
 | `check_links.py` | 저장소 내부 Markdown 상대 링크와 `#L번호`의 존재 | 외부 웹페이지 상태, 인용한 주장의 진위 |
 | `check_project_contract.py` | Stonecutter·CI 매트릭스·의존성 대상 일치, 스킬 위치·메타데이터·무시 규칙 | 각 Minecraft 버전의 실제 컴파일·실행 |
-| `run_contracts.py` | Minecraft에 의존하지 않는 `ChannelRules`와 `VillasMsg`의 현재 와이어 계약 | 네트워크 연결, Fabric Mixins, 시그널링 서버 동작 |
+| `run_contracts.py` | Minecraft에 의존하지 않는 채널·시그널링 계약, 로컬 소켓의 루프백 바인드·대체 포트, 초대 코드 형식 | Fabric Mixins, 초대 코드의 예측 저항성 증명, 실게임 접속·입장 정책·역할 배지 표시, 외부 시그널링 서버 동작 |
 
-위의 검사는 PR #1의 스킬·문서 추적과 PR #2의 연구 문서·코드 구조 점검에 바로 적용할 수 있다. PR #2의 최적화·보안 제안은 아직 구현이나 동작 시험 결과가 아니다. 소스의 특정 문자열을 찾는 것만으로 루프백 바인드, 초대 코드 예측 저항성, 스레드 정지 해소를 `PASS`로 표시하지 않는다.
+위의 검사는 PR #1의 스킬·문서 추적과 PR #2의 연구 문서·코드 구조 점검에 적용할 수 있다. [순차 작업 01·02](work-guides/README.md)의 일부 구현에는 순수 Java 검사가 추가됐다. 03 이후 제안은 이 브랜치에서 PLANNED다. 로컬 소켓 검사만으로 Minecraft 접속을 `PASS`로 표시하지 않는다.
 
 ## 빌드와 실제 접속 기록
 
 공유 Java 소스를 고친 PR은 프로젝트 스킬에 따라 최소 1.21.x와 26.x 대표 대상을 빌드한다. 릴리스 범위 주장은 기존 `.github/workflows/build.yml`의 17개 대상이 모두 통과한 결과를 사용한다. 컴파일과 위 도구를 통과해도 두 게임 인스턴스 사이의 P2P 연결은 별도로 관찰해야 한다.
+
+현재 01·02 변경을 포함한 이 브랜치에서는 JDK 25·Gradle 9.7.1로 `:1.21:build`와 `:26.2:build`가 각각 성공했다(`--configure-on-demand --offline --no-daemon`). 두 JAR의 `fabric.mod.json`은 각각 Minecraft `1.21`·Java `>=21`, Minecraft `26.2`·Java `>=25`를 요구하며 `InviteCodes.class`가 포함됐다. 이 로컬 체크아웃에서 전체 17개 대상 빌드는 실행하지 않았으므로 PR CI를 별도로 확인한다. 두 클라이언트 연결은 미검증이다.
 
 런타임 확인이 필요한 변경에는 아래 항목을 PR 설명이나 별도 기록에 남긴다. 미실행 항목은 `미실행`으로 둔다.
 

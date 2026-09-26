@@ -3,9 +3,6 @@ package kfc.udp.client.webrtc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.net.ServerSocket;
-
 /**
  * WebRTC/KCP 브리지 관리. (외부 바이너리 의존 없음 — 전부 Java 네이티브)
  * <p>
@@ -59,17 +56,20 @@ public class WebRtcBridge {
         stop();
         Roles.refreshAsync();
 
-        activeLocalPort = findFreePort();
-        LOG.info("[WebRTC] Starting native WebRTC, room={} port={}", roomId, activeLocalPort);
-
-        WebRtcClient client = new WebRtcClient(roomId, activeLocalPort);
+        WebRtcClient client = new WebRtcClient(roomId, LOCAL_PORT);
         webRtcClient = client;
 
-        // start()는 시그널링 연결 + TCP 서버 오픈 후 즉시 반환
-        // MC 클라이언트 접속 후 백그라운드에서 WebRTC 협상 진행
-        client.start();
-
-        return activeLocalPort;
+        try {
+            // start()가 실제 루프백 리스너를 확보한 뒤 포트를 읽는다.
+            client.start();
+            activeLocalPort = client.localPort();
+            LOG.info("[WebRTC] Starting native WebRTC, room={} port={}", roomId, activeLocalPort);
+            return activeLocalPort;
+        } catch (Exception failure) {
+            client.close();
+            clearClientIfCurrent(client);
+            throw failure;
+        }
     }
 
     public static void stop() {
@@ -164,13 +164,4 @@ public class WebRtcBridge {
         }
     }
 
-    // ── 유틸 ──────────────────────────────────────────────────────────────────
-
-    private static int findFreePort() {
-        try (ServerSocket ignored = new ServerSocket(LOCAL_PORT)) { return LOCAL_PORT; }
-        catch (IOException e) {
-            try (ServerSocket s = new ServerSocket(0)) { return s.getLocalPort(); }
-            catch (IOException ex) { return LOCAL_PORT; }
-        }
-    }
 }
