@@ -1,100 +1,112 @@
-# kfcudp-instant-p2p
+# Instant P2P — 연구용 포크
 
-> P2P 기반의 간편한 친구 초대 멀티플레이 모드 · A lightweight P2P multiplayer invite mod for Minecraft
+이 저장소는 [KITE2459의 Instant P2P](https://github.com/KITE2459/kfcudp-instant-p2p)를 분석하고 구조 분리와 호환성 아이디어를 실험하는 **비공식 연구용 포크**로만 유지한다. 이 첫 화면은 코드의 위치와 연구 범위를 안내한다. 모드 사용 안내와 원 제작자의 설명은 [원본 저장소](https://github.com/KITE2459/kfcudp-instant-p2p)를 참고한다.
 
-![WebRTC P2P](https://img.shields.io/badge/WebRTC-P2P-4caf50?style=flat-square)
-![Seoul Oracle Cloud](https://img.shields.io/badge/Server-Seoul%20Oracle%20Cloud-1976d2?style=flat-square)
-![Invite Code](https://img.shields.io/badge/방식-초대코드-00897b?style=flat-square)
+## 코드 트리
 
----
+현재 Java 소스는 **51개**다. `ChannelRules.java`를 분리하기 전 기준은 50개였으며, Stonecutter 빌드 대상은 **17개 Minecraft 버전**이다. 아래 트리는 실제 소스 파일의 위치를 보여 준다. 파일의 책임과 호출 관계는 [상세 코드 트리·분리 지도](docs/research/code-tree.md)에 기록했다.
 
-## 📋 개요 / Overview
+```text
+.
+├─ .github/workflows/build.yml             버전별 CI 빌드
+├─ build.gradle.kts                         1.21.x 빌드
+├─ build-26x.gradle.kts                     26.x 빌드
+├─ settings.gradle.kts                      Stonecutter 대상 버전
+├─ stonecutter.gradle.kts                   JAR 수집
+├─ stonecutter.properties.toml             공통 버전·대상별 의존성
+├─ gradle.properties                        Loader·빌드 설정
+├─ .agents/skills/instant-p2p-maintainer/   프로젝트 AI 스킬
+│  └─ SKILL.md
+├─ docs/research/                           연구 기록
+│  ├─ code-tree.md
+│  └─ compatibility-and-modpack.md
+└─ src/
+   ├─ main/resources/
+   │  ├─ fabric.mod.json                    모드 진입점·의존성
+   │  └─ assets/instant-p2p/                아이콘·언어·GUI 리소스
+   └─ client/
+      ├─ resources/instant-p2p.client.mixins.json
+      └─ java/kfc/udp/client/
+         ├─ KfcudpClient.java               클라이언트 진입점·방 생명주기
+         ├─ ChatHideSync.java
+         ├─ DevBadge.java
+         ├─ gui/                             화면 7개
+         │  ├─ BlockedPlayersScreen.java
+         │  ├─ ChannelScreen.java
+         │  ├─ ChzzkLinkScreen.java
+         │  ├─ ConfirmPopup.java
+         │  ├─ CustomRoomScreen.java
+         │  ├─ RoomListScreen.java
+         │  └─ SafetyWarningScreen.java
+         ├─ mixin/                           Minecraft 접점 14개
+         │  ├─ ClientConnectionMixin.java
+         │  ├─ CommandNodeAccessor.java
+         │  ├─ ConnectScreenMixin.java
+         │  ├─ DevBadgeMixin.java
+         │  ├─ DevNameMixin.java
+         │  ├─ IntegratedServerAccessor.java
+         │  ├─ IntegratedServerMaxPlayersMixin.java
+         │  ├─ IntegratedServerStopMixin.java
+         │  ├─ PlayerJoinMessageMixin.java
+         │  ├─ PlayerManagerAccessor.java
+         │  ├─ PlayerManagerMixin.java
+         │  ├─ ServerAddressMixin.java
+         │  ├─ ServerDisconnectStopMixin.java
+         │  └─ SocialHideMixin.java
+         ├─ webrtc/                          방 발견·전송·정책 21개
+         │  ├─ BatchPipe.java
+         │  ├─ ChannelRules.java
+         │  ├─ ChzzkLink.java
+         │  ├─ ExpelManager.java
+         │  ├─ IceConfig.java
+         │  ├─ P2PBanManager.java
+         │  ├─ P2PConfig.java
+         │  ├─ P2PNet.java
+         │  ├─ P2PWhitelistManager.java
+         │  ├─ PublicRoomAnnouncer.java
+         │  ├─ PublicRoomBrowser.java
+         │  ├─ Roles.java
+         │  ├─ RoomMembersProbe.java
+         │  ├─ RoomRoles.java
+         │  ├─ SignalingRtt.java
+         │  ├─ VillasMsg.java
+         │  ├─ WebRtcBridge.java
+         │  ├─ WebRtcClient.java
+         │  ├─ WebRtcHost.java
+         │  ├─ WebRtcStats.java
+         │  └─ WebSocketClient.java
+         └─ kcp/                             별도 KCP 접속 경로 6개
+            ├─ KcpAddressRegistry.java
+            ├─ KcpChannel.java
+            ├─ KcpCore.java
+            ├─ KcpException.java
+            ├─ KcpExceptionHandler.java
+            └─ KcpOutput.java
+```
 
-### 🇰🇷 한국어
+## 소스에서 읽은 연결 흐름
 
-이 모드는 **26.2-snapshot7**에서 실험된 P2P 멀티플레이 기능을 백포팅하여, 성능 개선·경량화·기능 간소화를 적용한 커스텀 버전입니다.
+```text
+방 생성: KfcudpClient → WebRtcBridge → WebRtcHost → 통합 서버 TCP
+방 입장: RoomListScreen → PublicRoomBrowser / RoomMembersProbe
+         → ConnectScreenMixin → WebRtcClient
+시그널링: VillasMsg(JSON) ↔ WebSocketClient ↔ 외부 시그널링 서버
+게임 패킷: P2PNet(Fabric payload) ↔ 호스트 입장 정책·방 상태
+```
 
-기존의 친구 추가·허가 절차를 완전히 제거하고, **e4mc**와 유사한 방식으로 초대코드 하나만으로 즉시 접속할 수 있습니다.
-시그널링·STUN·TURN 서버는 **서울 오라클 클라우드**에 위치합니다.
+시그널링·TURN 서버 구현은 이 저장소 밖에 있다. 위 흐름은 소스 구조를 요약한 것으로 실제 연결 시험 결과는 아니다.
 
-### 🇺🇸 English
+## 연구 및 분리 현황
 
-This mod is a custom, performance-optimized and slimmed-down, backporting the P2P multiplayer feature originally experimented in **26.2-snapshot7**.
-
-The traditional friend-request and approval flow has been completely removed. Just like **e4mc**, a simple invite code is all you need to connect.
-Signaling, STUN, and TURN servers are hosted on **Oracle Cloud Seoul**.
-
----
-
-## 🚀 사용 방법 / How to Use
-
-### 🖥️ 호스트 (방 만들기) / Host — Create a Room
-
-1. **싱글플레이 세계에 접속 / Enter singleplayer world**
-   기존에 플레이하던 싱글플레이 세계를 엽니다.
-   Open your existing singleplayer world.
-
-2. **우측 상단 버튼 클릭 / Click top-right button**
-   화면 우측 상단의 **"커스텀 방 만들기"** 버튼을 클릭합니다.
-   Click the **"Create Custom Room"** button in the top-right corner of the screen.
-
-3. **초대코드 공유 / Share the invite code**
-   생성된 초대코드를 접속자에게 전달합니다.
-   Share the generated invite code with your friends.
-
----
-
-### 🎮 접속자 (방 들어가기) / Client — Join a Room
-
-1. **멀티플레이 화면으로 이동 / Go to multiplayer screen**
-   타이틀 화면에서 **멀티플레이**를 선택합니다.
-   Select **Multiplayer** from the title screen.
-
-2. **"커스텀 방 들어가기" 클릭 / Click "Join Custom Room"**
-   멀티플레이 화면에서 **"커스텀 방 들어가기"** 버튼을 클릭합니다.
-   Click the **"Join Custom Room"** button on the multiplayer screen.
-
-3. **초대코드 입력 / Enter the invite code**
-   호스트에게 받은 초대코드를 입력하면 즉시 접속됩니다.
-   Enter the invite code from the host to connect instantly.
-
----
-
-## 🛡️ 방 관리 기능 / Room Management
-
-### 🇰🇷 한국어
-
-초대코드 하나로 누구나 접속할 수 있는 대신, 호스트가 방을 직접 통제할 수 있는 수단을 함께 제공합니다.
-
-- **화이트리스트** — `/whitelist on`으로 켜면 등록된 플레이어만 입장할 수 있습니다. `/whitelist add|remove <닉네임>`으로 관리하고, `/whitelist list`로 목록을 확인합니다.
-- **밴 / 킥** — `/ban <닉네임>`, `/ban-ip <닉네임>`(우회 재접속 차단), `/kick <닉네임>`, 해제는 `/pardon`·`/pardon-ip`. WebRTC 터널을 지나면 모든 접속자가 겉보기엔 같은 로컬 주소로 보이지만, 실제 원격 IP를 별도로 추적해 IP 밴이 정확히 동작합니다.
-- **연결 경로 알림** — 각 플레이어가 P2P로 직결됐는지, 중계 서버(TURN)를 거쳤는지 참여 메시지에 자동으로 표시됩니다. 접속자 본인에게도 월드 진입 시 알려줍니다. 네트워크 환경에 따른 지연 차이를 바로 파악할 수 있습니다.
-
-이 명령어들은 방장(싱글플레이 소유자)이 실행할 수 있으며, 방을 열 때마다 자동으로 등록됩니다.
-
-### 🇺🇸 English
-
-Since anyone with the invite code can join, the host is given real tools to keep the room under control.
-
-- **Whitelist** — Turn it on with `/whitelist on` to only allow registered players in. Manage it with `/whitelist add|remove <name>`, and check it with `/whitelist list`.
-- **Ban / Kick** — `/ban <name>`, `/ban-ip <name>` (blocks reconnects via a new account), `/kick <name>`, and `/pardon` / `/pardon-ip` to undo. Every guest tunneled through WebRTC would normally look like it's coming from the same local address, but the mod tracks each guest's real remote IP separately so IP bans work correctly.
-- **Connection-type indicator** — Whether each player connected directly (P2P) or through the relay (TURN) server is shown automatically in the join message, and joiners are told their own connection type when they enter the world — handy for spotting network-related latency differences at a glance.
-
-These commands are available to the host (the singleplayer world owner) and are (re-)registered automatically whenever a room is opened.
-
----
-
-## ⚙️ 기술 사양 / Technical Details
-
-| 항목 / Item | 내용 / Details |
+| 상태 | 내용 |
 |---|---|
-| 연결 방식 / Connection | WebRTC 기반 P2P / WebRTC-based P2P |
-| 서버 위치 / Server Region | 서울, 한국 / Seoul, South Korea |
-| 서버 인프라 / Infrastructure | Oracle Cloud |
-| 서버 구성 / Server Stack | Signaling + STUN + TURN |
+| **분리 완료** | 채널 파싱·조합·방 표시 규칙을 `P2PConfig`에서 `ChannelRules`로 추출하고 기존 공개 호출 경로를 유지했다. |
+| **계획** | 방 목록 표시 상태, 방 생명주기, WebRTC 세션·터널, 입장 정책의 경계를 단계별로 검토한다. |
+| **로컬 빌드 확인** | 위 코드 분리 후 `:1.21:build`와 `:26.2:build`가 성공했다. |
+| **미검증** | 전체 17개 대상 빌드와 실제 Minecraft 호스트·게스트 연결. |
 
----
+- [코드 트리·분리 지도](docs/research/code-tree.md): 전체 파일 역할, 의존 관계, 분리 후보와 유지할 계약
+- [호환성·모드팩 공유 조사](docs/research/compatibility-and-modpack.md): 확인한 사실과 아직 제안 단계인 아이디어
+- [프로젝트 AI 스킬](.agents/skills/instant-p2p-maintainer/SKILL.md): 이 포크에서 코드 변경을 검토할 때의 경계와 검증 기준
 
-## 포크의 독립 조사 기록 / Independent fork research
-
-이 포크에서 수행한 소스 분석과 아직 검증되지 않은 개발 제안은 [호환성·모드팩 공유 조사](docs/research/compatibility-and-modpack.md)에 구분해 기록했다. [코드 트리와 단계별 분리 지도](docs/research/code-tree.md)는 현재 파일 관계와 리팩터링 경계를 보여 준다. 반복 작업을 위한 [프로젝트 AI 스킬](.agents/skills/instant-p2p-maintainer/SKILL.md)도 함께 둔다. 원 제작자의 공식 기능 설명은 아니다.
+연구 문서와 실험 결과는 원 제작자의 공식 기능 설명이 아니다.
