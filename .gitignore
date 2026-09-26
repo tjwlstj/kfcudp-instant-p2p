@@ -9,6 +9,7 @@ gradle.*
 kartriderpack*
 *.md
 !docs/research/*.md
+!.agents/skills/*/SKILL.md
 bin
 .claude/
 signaling thing/

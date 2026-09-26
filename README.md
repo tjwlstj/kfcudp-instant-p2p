@@ -97,4 +97,4 @@ These commands are available to the host (the singleplayer world owner) and are 
 
 ## 포크의 독립 조사 기록 / Independent fork research
 
-이 포크에서 수행한 소스 분석과 아직 검증되지 않은 개발 제안은 [호환성·모드팩 공유 조사](docs/research/compatibility-and-modpack.md)에 구분해 기록했다. 원 제작자의 공식 기능 설명은 아니다.
+이 포크에서 수행한 소스 분석과 아직 검증되지 않은 개발 제안은 [호환성·모드팩 공유 조사](docs/research/compatibility-and-modpack.md)에 구분해 기록했다. [코드 트리와 단계별 분리 지도](docs/research/code-tree.md)는 현재 파일 관계와 리팩터링 경계를 보여 준다. 반복 작업을 위한 [프로젝트 AI 스킬](.agents/skills/instant-p2p-maintainer/SKILL.md)도 함께 둔다. 원 제작자의 공식 기능 설명은 아니다.

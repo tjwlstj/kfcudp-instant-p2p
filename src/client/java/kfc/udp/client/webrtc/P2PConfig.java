@@ -12,7 +12,6 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -390,28 +389,16 @@ public final class P2PConfig {
     }
 
     /** 채널 개수 상한 — 채널마다 lobby에 접속(방장 1개, 구경꾼 샤드 수만큼)하므로 소켓 수를 묶어 둔다. */
-    public static final int MAX_CHANNELS = 5;
+    public static final int MAX_CHANNELS = ChannelRules.MAX_CHANNELS;
     /** 채널 하나의 글자 수 상한 — 부하와는 무관(채널 이름은 고정 크기 해시로만 쓰인다), 칩 표시가 줄바꿈
      * 없이 들어가고 공지 payload 크기를 예측 가능하게 두기 위함. */
-    public static final int MAX_CHANNEL_LENGTH = 24;
+    public static final int MAX_CHANNEL_LENGTH = ChannelRules.MAX_CHANNEL_LENGTH;
 
     /** 쉼표로 구분한 입력을 목록으로 — 공백은 걷어내고, 빈 항목("a,,b"의 가운데, 맨 앞)은 기본 채널로 친다.
      * 맨 끝 쉼표 하나("a,")는 아직 입력 중인 것으로 보고 무시한다. 대소문자 무시 중복 제거, MAX_CHANNELS개까지,
      * 채널 하나당 MAX_CHANNEL_LENGTH자까지(넘으면 자른다). */
     public static List<String> parseChannels(String text) {
-        List<String> out = new ArrayList<>();
-        String[] parts = (text == null ? "" : text).split(",", -1);
-        int n = parts.length;
-        if (n > 1 && parts[n - 1].isBlank()) n--;
-        for (int i = 0; i < n; i++) {
-            String t = parts[i].trim();
-            if (t.isEmpty()) t = DEFAULT_CHANNEL;
-            if (t.length() > MAX_CHANNEL_LENGTH) t = t.substring(0, MAX_CHANNEL_LENGTH);
-            if (out.stream().anyMatch(t::equalsIgnoreCase)) continue;
-            if (out.size() >= MAX_CHANNELS) break;
-            out.add(t);
-        }
-        return List.copyOf(out);
+        return ChannelRules.parseChannels(text);
     }
 
     public static void setChannels(String text) {
@@ -425,9 +412,7 @@ public final class P2PConfig {
      * (소문자·정렬·입력 불가능한 구분 문자로 이어서, "a,b"를 and로 쓰는 사람끼리만 같은 값이 된다). lobby 이름과
      * 보임 판정이 둘 다 이 목록을 쓴다 — 채널이 하나라도 겹쳐야 서로 보인다. */
     public static List<String> effectiveChannels(List<String> channels, boolean and) {
-        if (!and || channels.size() <= 1) return channels;
-        return List.of(channels.stream().map(c -> c.toLowerCase(java.util.Locale.ROOT)).sorted()
-                .collect(java.util.stream.Collectors.joining(String.valueOf(AND_SEPARATOR))));
+        return ChannelRules.effectiveChannels(channels, and);
     }
 
     public static List<String> getEffectiveChannels() {
@@ -436,15 +421,8 @@ public final class P2PConfig {
 
     /** 이 방이 내게 보이는지 — 방장의 실제 채널과 내 실제 채널이 하나라도 겹치면. 대소문자 구분 없음. */
     public static boolean roomVisible(String hostChannels, boolean hostAnd, List<String> mine, boolean mineAnd) {
-        List<String> host = effectiveChannels(parseChannels(hostChannels), hostAnd);
-        List<String> me = effectiveChannels(mine, mineAnd);
-        return host.stream().anyMatch(h -> me.stream().anyMatch(h::equalsIgnoreCase));
+        return ChannelRules.roomVisible(hostChannels, hostAnd, mine, mineAnd);
     }
-
-    /** and 묶음 채널의 구분 문자 — 입력란으로는 칠 수 없는 제어 문자라 "a&b" 같은 채널 이름과 안 겹친다. */
-    private static final char AND_SEPARATOR = '\u001F';
-
-    private static final String DEFAULT_CHANNEL = "normal";
 
     private static List<String> loadChannels() {
         JsonObject o = readSettingsFile();
