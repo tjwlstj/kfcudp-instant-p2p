@@ -8,10 +8,13 @@ gradle.*
 *.zip
 kartriderpack*
 *.md
-!docs/research/*.md
-!.agents/skills/*/SKILL.md
+!docs/**/*.md
+!.agents/skills/**/*.md
 bin
-.claude/
+# .claude/skills/ 내부는 공유 대상으로 두고, 그 밖의 개인 Claude 설정은 제외
+.claude/*
+!.claude/skills/
+!.claude/skills/**/*.md
 signaling thing/
 
 # eclipse
