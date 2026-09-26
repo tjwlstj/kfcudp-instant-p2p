@@ -8,10 +8,13 @@ gradle.*
 *.zip
 kartriderpack*
 *.md
-!docs/research/*.md
-!.agents/skills/*/SKILL.md
+!docs/**/*.md
+!.agents/skills/**/*.md
 bin
-.claude/
+# 개인 Claude 설정은 제외하고 저장소 공용 스킬만 추적
+.claude/*
+!.claude/skills/
+!.claude/skills/**/*.md
 signaling thing/
 
 # eclipse

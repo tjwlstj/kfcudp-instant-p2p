@@ -14,8 +14,13 @@
 ├─ stonecutter.properties.toml             공통 모드 버전·대상별 의존성
 ├─ gradle.properties                        Loader·빌드 설정
 ├─ gradle/wrapper/                           Gradle wrapper
-├─ .agents/skills/instant-p2p-maintainer/   이 포크의 AI 유지보수 스킬
+├─ .agents/skills/instant-p2p-maintainer/   이 포크의 AI 유지보수 스킬(원본)
 │  └─ SKILL.md
+├─ .claude/skills/instant-p2p-maintainer/   Claude Code 탐색용 진입점, 원본을 가리킴
+│  └─ SKILL.md
+├─ docs/research/                           연구 기록
+│  ├─ code-tree.md
+│  └─ compatibility-and-modpack.md
 └─ src/
    ├─ main/resources/
    │  ├─ fabric.mod.json                    진입점·대상별 필수 의존성
