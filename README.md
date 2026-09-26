@@ -109,6 +109,7 @@
 
 - [코드 트리·분리 지도](docs/research/code-tree.md): 전체 파일 역할, 의존 관계, 분리 후보와 유지할 계약
 - [호환성·모드팩 공유 조사](docs/research/compatibility-and-modpack.md): 확인한 사실과 아직 제안 단계인 아이디어
+- [필요 기능·역할·최적화 조사](docs/research/feature-role-optimization.md): 게임 스레드 대기, 데이터 경로, 신뢰 경계, 추가 기능 후보와 우선순위
 - [프로젝트 AI 스킬](.agents/skills/instant-p2p-maintainer/SKILL.md): 이 포크에서 코드 변경을 검토할 때의 경계와 검증 기준. Claude Code용 프로젝트 [진입점 파일](.claude/skills/instant-p2p-maintainer/SKILL.md)은 이 원본을 가리킨다.
 
 연구 문서와 실험 결과는 원 제작자의 공식 기능 설명이 아니다.
