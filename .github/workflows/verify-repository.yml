@@ -1,0 +1,28 @@
+name: verify repository
+
+on: [pull_request, push, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts-and-tree:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Check repository structure
+        run: python tools/verify/check_tree.py
+      - name: Check local documentation links
+        run: python tools/verify/check_links.py
+      - name: Check versions and skill discovery
+        run: python tools/verify/check_project_contract.py
+      - name: Check pure Java wire contracts
+        run: python tools/verify/run_contracts.py
