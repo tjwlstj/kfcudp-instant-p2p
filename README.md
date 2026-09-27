@@ -2,6 +2,8 @@
 
 이 저장소는 [KITE2459의 Instant P2P](https://github.com/KITE2459/kfcudp-instant-p2p)를 분석하고 구조 분리와 호환성 아이디어를 실험하는 **비공식 연구용 포크**로만 유지한다. 이 첫 화면은 코드의 위치와 연구 범위를 안내한다. 모드 사용 안내와 원 제작자의 설명은 [원본 저장소](https://github.com/KITE2459/kfcudp-instant-p2p)를 참고한다.
 
+> **검수 기록:** 커밋을 고정해 포크 전체를 점검한 결과는 [`docs/review/`](docs/review/README.md)에 날짜별로 남긴다. 최근 검수는 [2026-09-27 전수 검수](docs/review/2026-09-27/README.md)다.
+
 ## 코드 트리
 
 현재 Java 소스는 **53개**다. `ChannelRules.java`를 분리하기 전 기준은 50개였으며, Stonecutter 빌드 대상은 **17개 Minecraft 버전**이다. 아래 트리는 실제 소스 파일의 위치를 보여 준다. 파일의 책임과 호출 관계는 [상세 코드 트리·분리 지도](docs/research/code-tree.md)에 기록했다.
