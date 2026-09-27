@@ -26,7 +26,7 @@
 | [`src/client/java/kfc/udp/client/gui/ChzzkLinkScreen.java`](../../../src/client/java/kfc/udp/client/gui/ChzzkLinkScreen.java) | 주요 경로 + 분기 대조 + 위험 호출 검색 | R02 |
 | [`src/client/java/kfc/udp/client/gui/ConfirmPopup.java`](../../../src/client/java/kfc/udp/client/gui/ConfirmPopup.java) | 분기 대조 + 위험 호출 검색 | — |
 | [`src/client/java/kfc/udp/client/gui/CustomRoomScreen.java`](../../../src/client/java/kfc/udp/client/gui/CustomRoomScreen.java) | 주요 경로 + 분기 대조 + 위험 호출 검색 | — |
-| [`src/client/java/kfc/udp/client/gui/RoomListScreen.java`](../../../src/client/java/kfc/udp/client/gui/RoomListScreen.java) | 주요 경로 + 분기 대조 + 위험 호출 검색 | R10 R11 |
+| [`src/client/java/kfc/udp/client/gui/RoomListScreen.java`](../../../src/client/java/kfc/udp/client/gui/RoomListScreen.java) | 주요 경로 + 분기 대조 + 위험 호출 검색 | R10 R11 R28 |
 | [`src/client/java/kfc/udp/client/gui/SafetyWarningScreen.java`](../../../src/client/java/kfc/udp/client/gui/SafetyWarningScreen.java) | 분기 대조 + 위험 호출 검색 | — |
 | [`src/client/java/kfc/udp/client/kcp/KcpAddressRegistry.java`](../../../src/client/java/kfc/udp/client/kcp/KcpAddressRegistry.java) | 전문 | R24 |
 | [`src/client/java/kfc/udp/client/kcp/KcpChannel.java`](../../../src/client/java/kfc/udp/client/kcp/KcpChannel.java) | 구조·자원 처리 훑기 | — |

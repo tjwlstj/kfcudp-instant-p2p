@@ -9,8 +9,11 @@ package kfc.udp.client.webrtc;
  *       docs/review/2026-09-27/evidence/VillasMsgProbe.java
  * java -cp OUT kfc.udp.client.webrtc.VillasMsgProbe
  * </pre>
- * Each line prints the parsed value next to the value the sender wrote. A line
- * whose two values differ is a parser defect, not a signaling-server behaviour.
+ * Each line prints the parsed value next to the value the sender wrote. The R01
+ * and backslash cases parse frames built by this mod's own roomUpdate(); the
+ * unicode/tab case parses a hand-written frame, because this mod's escape()
+ * never produces those escapes. A DIFF line shows a parser defect only; it does
+ * not show that a signaling server or another client sends such input.
  */
 public final class VillasMsgProbe {
     private VillasMsgProbe() {}
@@ -24,7 +27,7 @@ public final class VillasMsgProbe {
         String r1 = VillasMsg.object(f1, "room_update");
         report("R06 title ending in backslash", backslash, VillasMsg.field(r1, "title"));
 
-        // R06: unicode and tab escapes as emitted by common JSON encoders.
+        // R06: hand-written frame with standard JSON unicode and tab escapes.
         String f2 = "{\"room_update\":{\"code\":\"X\",\"title\":\"A " + (char) 92 + "u0026 B"
                 + (char) 92 + "tC\"}}";
         report("R06 unicode and tab escapes", "A & B\tC",

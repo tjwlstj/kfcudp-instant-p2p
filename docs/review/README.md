@@ -4,7 +4,7 @@
 
 | 날짜 | 기준 커밋 | 범위 | 결과 |
 |---|---|---|---|
-| [2026-09-27](2026-09-27/README.md) | `main` [`c677b47`](https://github.com/tjwlstj/kfcudp-instant-p2p/commit/c677b47c0b86b74898765a16b47ae839bcf1e071) + 열린 PR #4 | 추적 파일 123개 전체 | 중간 5 · 낮음 15 · 정보 7, 높음 없음 |
+| [2026-09-27](2026-09-27/README.md) | `main` [`c677b47`](https://github.com/tjwlstj/kfcudp-instant-p2p/commit/c677b47c0b86b74898765a16b47ae839bcf1e071) + 열린 PR #4 | 추적 파일 123개 전체 | 중간 5 · 낮음 16 · 정보 7, 높음 없음 |
 
 ## 읽는 법
 

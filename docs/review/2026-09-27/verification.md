@@ -49,17 +49,37 @@ BUILD SUCCESSFUL in 3m 22s (24 tasks)
 
 ## 4. 1.21.x ↔ 26.x 분기 대조
 
-[`branch_parity.py`](evidence/branch_parity.py)는 `//? if >=26.x { … } else { … }` 쌍을 찾는다. 두 본문을 같은 이름 체계로 바꾼 뒤 비교한다.
+[`branch_parity.py`](evidence/branch_parity.py)는 Stonecutter 버전 분기를 두 종류로 나눠 본다.
+
+- **if/else 쌍:** 두 본문을 같은 이름 체계(Yarn → Mojang)로 바꾼 뒤 비교한다. 대부분 26.x ↔ 1.21.x이고, 1.21.x 안에서 갈리는 쌍(`>=1.21.9` 등)도 포함한다.
+- **`else` 없는 블록:** 26.3 전용 메서드나 `>=1.21.9 <26.1` 같은 구간이다. 대응 본문이 없어 쌍으로 비교할 수 없으므로, 같은 자리의 이웃 블록끼리 비교하고 홀로 있는 블록은 본문 전체를 출력한다.
 
 ```text
 py -3 docs/review/2026-09-27/evidence/branch_parity.py src
-pairs=161 textually-different=100 reported=36
+pairs=163 textually-different=102 import-only=32 reported=70
+blocks-without-else=111 import-only=0 listed=111 multi-way-sites=20 lone-blocks=6
 ```
 
-- 글자가 다른 100쌍 가운데 64쌍은 import 줄뿐이거나 6줄 미만의 API 이름 차이다.
-- 나머지 36쌍의 차이를 모두 읽었다. 확인한 차이는 API 이름·위젯 빌더·렌더링 호출 차이, 그리고 26.x에서 믹스인이 대신 처리하는 빈 메서드(정원·게임 모드)였다.
-- 한쪽 시대에만 들어간 수정이나 조건은 찾지 못했다.
-- 이름 치환표는 휴리스틱이다. 결과가 비어 있어도 두 시대의 동작이 같다는 증명은 아니다.
+**if/else 쌍:**
+
+- 글자가 다른 102쌍 가운데 32쌍은 import 줄만 다르다.
+- 나머지 70쌍(초안에서 6줄 미만이라 빠졌던 34쌍 포함)의 차이를 모두 읽었다.
+- 대부분 다음 셋이었다.
+  - API 이름·위젯 빌더·렌더링 호출 차이
+  - 26.x에서 믹스인이 대신 처리하는 빈 메서드(정원·게임 모드)
+  - 같은 값의 상수 표기(GLFW 키 코드 257·335·256)
+- **동작이 다른 곳 1건:** 26.x의 `RoomListScreen.myUuid()`는 `getProfileId()` 결과를 null 확인 없이 `toString()`한다. 1.21.x는 `getUuidOrNull()`을 확인한다([R28](findings.md#r28)).
+
+**`else` 없는 블록:**
+
+- 111개를 26곳(여러 갈래 20곳, 단독 6곳)에서 모두 읽었다.
+- 이웃 갈래 사이의 차이는 API 이름, 입력 이벤트 타입, 렌더링 파이프라인, 사운드 재생 호출이었다.
+- 버전마다 의도적으로 다르게 동작하는 곳도 있다. 코드 주석에 이유가 적혀 있어 대조 결함으로 보지 않았다.
+  - 26.2 이상: 바닐라 LAN 설정 화면 동기화
+  - 26.3: 접속자 권한 판정 재정의
+  - 1.21.9 미만: 정원 필드 직접 덮어쓰기
+
+**한계:** 이름 치환표와 블록 묶기는 휴리스틱이다. 이 대조는 소스 비교일 뿐이고, 각 버전에서 게임을 실행해 동작이 같은지 확인하지는 않았다. 대조한 범위에서 한쪽에만 들어간 수정은 R28 한 건만 찾았다.
 
 ## 5. `VillasMsg` 파서 재현
 
@@ -74,7 +94,13 @@ DIFF R01 host_uuid after '}' title: sent=[host-uuid] parsed=[null]
 DIFF R01 banned_hashes after '}' title: sent=[hash1,hash2] parsed=[null]
 ```
 
-모든 입력은 이 모드 자신의 `VillasMsg.roomUpdate`가 만든 문자열이다. 서버의 동작과 무관한 클라이언트 파서 결함이다.
+사례마다 입력의 출처가 다르다.
+
+| 사례 | 입력 출처 | 판정 |
+|---|---|---|
+| R01 `}` 제목 뒤 필드 소실 | 이 모드의 `VillasMsg.roomUpdate` 생성 결과 | 모드가 직접 보내는 메시지를 자기 파서가 잘못 읽는다. 서버 동작과 무관하다 |
+| R06 백슬래시로 끝나는 제목 | 이 모드의 `VillasMsg.roomUpdate` 생성 결과 | 위와 같다 |
+| R06 `&`·`\t` 이스케이프 | 하네스 안에서 손으로 쓴 JSON 문자열 | 파서가 표준 JSON 이스케이프를 풀지 못한다는 것만 확인했다. 이 모드의 `escape()`는 `\u`·`\t`를 만들지 않는다. 시그널링 서버나 다른 클라이언트가 이런 문자열을 실제로 보내는지는 확인하지 않았다(추정) |
 
 ## 6. webrtc-java 바이트코드 확인
 
